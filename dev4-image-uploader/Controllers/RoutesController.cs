@@ -29,9 +29,9 @@ namespace dev4_image_uploader.Controllers
         [HttpPost("upload")]
         public async Task<IActionResult> UploadImage(IFormFile file)
         {
-            (bool success, string? validationMessage) = await IsValidImage(file);
+            (bool valid, string? validationMessage) = await IsValidImage(file);
 
-            if (!success)
+            if (!valid)
             {
                 return BadRequest(validationMessage);
             }
@@ -67,20 +67,20 @@ namespace dev4_image_uploader.Controllers
         }
 
         [HttpGet("recentUpload")]
-        public async Task<IActionResult> getRecentImage()
+        public async Task<IActionResult> GetRecentImage()
         {
             return Ok("this is the recent upload route!");
         }
         
 
         [HttpGet("download/{fileName}")]
-        public async Task<IActionResult> downloadImage(string fileName)
+        public async Task<IActionResult> DownloadImage(string fileName)
         {
             return Ok("this is the download route!");
         }
 
         [HttpGet("allUploads")]
-        public async Task<IActionResult> getAllEntries()
+        public async Task<IActionResult> GetAllEntries()
         {
             //Console.WriteLine("this is the allUploads route!");
             var allEntries = await _context.ImageEntries.ToListAsync();
@@ -94,9 +94,40 @@ namespace dev4_image_uploader.Controllers
             }
             return Ok(allEntries);
         }
-        
 
-        public async Task<(bool success, string? message)> IsValidImage(IFormFile file)
+        // should require special privilages. for testing purposes mostly
+        [HttpDelete("deleteAll")]
+        public async Task<IActionResult> DeleteAllEntries()
+        {
+            var allEntries = await _context.ImageEntries.ToListAsync();
+            if (allEntries == null || allEntries.Count == 0)
+            {
+                return BadRequest("No images to delete.");
+            }
+
+            _context.ImageEntries.RemoveRange(allEntries);
+            foreach (var entry in allEntries)
+            {
+                if (System.IO.File.Exists(entry.FilePath))
+                {
+                    System.IO.File.Delete(entry.FilePath);
+                } 
+                else
+                {
+                    Console.WriteLine($"File not found: {entry.FilePath}");
+                }
+            }
+            await _context.SaveChangesAsync();
+
+            if (await _context.ImageEntries.AnyAsync())
+            {
+                return StatusCode(500, "Failed to delete all images.");
+            }
+
+            return Ok("All images deleted successfully.");
+        }
+
+        public async Task<(bool valid, string? validationMessage)> IsValidImage(IFormFile file)
         {
             // can probably replace with exception handling
 
