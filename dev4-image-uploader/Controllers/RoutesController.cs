@@ -69,7 +69,21 @@ namespace dev4_image_uploader.Controllers
         [HttpGet("recentUpload")]
         public async Task<IActionResult> GetRecentImage()
         {
-            return Ok("this is the recent upload route!");
+            // returns the most recently uploaded image on the server
+            if (_context.ImageEntries == null || _context.ImageEntries.Count() == 0)
+            {
+                return NotFound("No images on the server yet");
+            }
+
+            ImageEntry? mostRecentUpload = await _context.ImageEntries
+            .Where(e1 => e1.UploadDate == _context.ImageEntries.Max(e2 => e2.UploadDate))
+            .FirstOrDefaultAsync();
+            
+            if (mostRecentUpload == null)
+            {
+                return NotFound("No uploads found.");
+            }
+            return Ok(mostRecentUpload);
         }
         
 
