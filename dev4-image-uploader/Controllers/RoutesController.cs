@@ -26,9 +26,10 @@ namespace dev4_image_uploader.Controllers
             return Ok("Welcome to the Image Uploader API!");
         }
 
-        [HttpPost("upload")]
+        [HttpPost("upload")] // CREATE
         public async Task<IActionResult> UploadImage(IFormFile file)
         {
+            // Checks validity of user request
             (bool valid, string? validationMessage) = await IsValidImage(file);
 
             if (!valid)
@@ -36,7 +37,7 @@ namespace dev4_image_uploader.Controllers
                 return BadRequest(validationMessage);
             }
 
-            // attempt to save image data if filename is unique and image content is valid
+            // Attempts to save image data if filename is unique and image content is valid
             var fileName = Path.GetFileName(file.FileName);
             var filePath = Path.Combine("wwwroot/uploads", file.FileName); // flesh out in the future
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -49,6 +50,7 @@ namespace dev4_image_uploader.Controllers
                 FileName = fileName,
                 FilePath = filePath,
                 UploadDate = DateTime.UtcNow,
+                ContentType = file.ContentType,
                 FileSize = (int)file.Length
             };
 
@@ -66,51 +68,73 @@ namespace dev4_image_uploader.Controllers
             return Ok(new { FilePath = filePath,  message = "file uploaded successfully!"});
         }
 
-        [HttpGet("recentUpload")]
+        [HttpGet("recent")] // READ
         public async Task<IActionResult> GetRecentImage()
         {
             // returns the most recently uploaded image on the server
             if (_context.ImageEntries == null || _context.ImageEntries.Count() == 0)
             {
-                return NotFound("No images on the server yet");
+                return NotFound("No recently uploaded images.");
             }
 
-            ImageEntry? mostRecentUpload = await _context.ImageEntries
-            .Where(e1 => e1.UploadDate == _context.ImageEntries.Max(e2 => e2.UploadDate))
+            ImageEntry? mostRecentEntry = await _context.ImageEntries
+            .Where(ef => ef.UploadDate == _context.ImageEntries.Max(e => e.UploadDate))
             .FirstOrDefaultAsync();
-            
-            if (mostRecentUpload == null)
+
+            if (mostRecentEntry == null) return StatusCode(500, "image data could not be fetched.");
+
+            return Ok(mostRecentEntry);
+        }
+
+        [HttpGet("view/{id}")] // READ
+        public async Task<IActionResult> DisplayImage(int id)
+        {
+            ImageEntry? imageEntry = await _context.ImageEntries.FindAsync(id);
+            if (imageEntry == null || !System.IO.File.Exists(imageEntry.FilePath))
             {
-                return NotFound("No uploads found.");
+                return NotFound("Image not found.");
             }
-            return Ok(mostRecentUpload);
+            var fileStream = new FileStream(imageEntry.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            return File(fileStream, imageEntry.ContentType ?? "application/octet-stream");
+
+        }
+
+        [HttpGet("describe/{id}")] // READ
+        public async Task<IActionResult> DescribeImage(int id)
+        {
+            ImageEntry? imageEntry = await _context.ImageEntries.FindAsync(id);
+            if (imageEntry == null)return NotFound("Image data not found.");            var fileStream = new FileStream(imageEntry.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            return Ok(imageEntry);
+
         }
         
-
-        [HttpGet("download/{fileName}")]
-        public async Task<IActionResult> DownloadImage(string fileName)
+        [HttpGet("download/{id}")] // READ
+        public async Task<IActionResult> DownloadImage(int id)
         {
-            return Ok("this is the download route!");
+            ImageEntry? imageEntry = await _context.ImageEntries.FindAsync(id);
+            if (imageEntry == null || !System.IO.File.Exists(imageEntry.FilePath))
+            {
+                return NotFound("Image not found.");
+            }
+            var fileStream = new FileStream(imageEntry.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            return File(fileStream, imageEntry.ContentType ?? "application/octet-stream", imageEntry.FileName);
+
         }
 
-        [HttpGet("allUploads")]
+        [HttpGet("showAll")] // READ
         public async Task<IActionResult> GetAllEntries()
         {
             //Console.WriteLine("this is the allUploads route!");
-            var allEntries = await _context.ImageEntries.ToListAsync();
+            List<ImageEntry>? allEntries = await _context.ImageEntries.ToListAsync();
             if (allEntries == null || allEntries.Count == 0)
             {
-                return NotFound("No images found.");
-            }
-            foreach (var entry in allEntries)
-            {
-                Console.WriteLine($"Id: {entry.Id}, FileName: {entry.FileName}, FilePath: {entry.FilePath}, UploadDate: {entry.UploadDate}, FileSize: {entry.FileSize}");
+                return NotFound("No images on the server yet.");
             }
             return Ok(allEntries);
         }
 
         // should require special privilages. for testing purposes mostly
-        [HttpDelete("deleteAll")]
+        [HttpDelete("deleteAll")] // DELETE
         public async Task<IActionResult> DeleteAllEntries()
         {
             var allEntries = await _context.ImageEntries.ToListAsync();

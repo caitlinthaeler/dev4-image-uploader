@@ -20,6 +20,7 @@ namespace dev4_image_uploader.Migrations
                     FileName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     FilePath = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     UploadDate = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    ContentType = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     FileSize = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>

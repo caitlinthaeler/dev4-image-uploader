@@ -12,7 +12,7 @@ using dev4_image_uploader.Data;
 namespace dev4_image_uploader.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250406015238_InitialCreate")]
+    [Migration("20250406063012_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -32,6 +32,10 @@ namespace dev4_image_uploader.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FileName")
                         .IsRequired()
