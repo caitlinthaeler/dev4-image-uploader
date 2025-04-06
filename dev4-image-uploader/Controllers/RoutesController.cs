@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using dev4_image_uploader.Models;
+using dev4_image_uploader.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace dev4_image_uploader.Controllers
 {
@@ -11,23 +13,30 @@ namespace dev4_image_uploader.Controllers
     [Route("/")]
     public class RoutesController : ControllerBase
     {
-        // temp storage
-        private Dictionary<string, ImageEntry> _imageEntries = new();
+        private readonly ApplicationDbContext _context;
+        private readonly string[] validExtensions = [ ".jpg", ".jpeg", ".png", ".gif" ];
+        public RoutesController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet]
+        public IActionResult DefaultRoute()
+        {
+            return Ok("Welcome to the Image Uploader API!");
+        }
 
         [HttpPost("upload")]
         public async Task<IActionResult> UploadImage(IFormFile file)
         {
-            if (file == null || file.Length == 0)
-            {
-                return BadRequest("No file uploaded.");
-            }
-
-            (bool success, string? validationMessage) = IsValidImage(file);
+            (bool success, string? validationMessage) = await IsValidImage(file);
 
             if (!success)
             {
                 return BadRequest(validationMessage);
             }
+
+            // attempt to save image data if filename is unique and image content is valid
             var fileName = Path.GetFileName(file.FileName);
             var filePath = Path.Combine("wwwroot/uploads", file.FileName); // flesh out in the future
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -43,10 +52,16 @@ namespace dev4_image_uploader.Controllers
                 FileSize = (int)file.Length
             };
 
-            _imageEntries.Add(fileName, imageEntry);
-            Console.WriteLine($"added image to dictionary. Number of entries: {_imageEntries.Count}");
-            Console.WriteLine(_imageEntries.Values.ToList());
-            Console.WriteLine("finished displaying dictionary");
+            // Save the image entry to the database
+            _context.ImageEntries.Add(imageEntry);
+
+            await _context.SaveChangesAsync();
+
+            // Check if the imageEntry was saved successfully
+            if (!await FilenameExists(fileName))
+            {
+                return StatusCode(500, "File upload failed.");
+            }
 
             return Ok(new { FilePath = filePath,  message = "file uploaded successfully!"});
         }
@@ -67,31 +82,35 @@ namespace dev4_image_uploader.Controllers
         [HttpGet("allUploads")]
         public async Task<IActionResult> getAllEntries()
         {
-            Console.WriteLine("this is the allUploads route!");
-            if (_imageEntries.Count == 0)
+            //Console.WriteLine("this is the allUploads route!");
+            var allEntries = await _context.ImageEntries.ToListAsync();
+            if (allEntries == null || allEntries.Count == 0)
             {
                 return NotFound("No images found.");
             }
-            return Ok(_imageEntries.Values.ToList());
+            foreach (var entry in allEntries)
+            {
+                Console.WriteLine($"Id: {entry.Id}, FileName: {entry.FileName}, FilePath: {entry.FilePath}, UploadDate: {entry.UploadDate}, FileSize: {entry.FileSize}");
+            }
+            return Ok(allEntries);
         }
         
 
-        public (bool success, string? message) IsValidImage(IFormFile file)
+        public async Task<(bool success, string? message)> IsValidImage(IFormFile file)
         {
+            // can probably replace with exception handling
+
             if (file == null || file.Length == 0)
             {
                 return (false, "No file uploaded.");
             }
 
-            if (FilenameExists(Path.GetFileName(file.FileName)))
+            if (await FilenameExists(Path.GetFileName(file.FileName)))
             {
                 return (false, "File name already exists.");
             }
 
-            var validExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
-            var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-
-            if (!validExtensions.Contains(fileExtension))
+            if (!validExtensions.Contains(Path.GetExtension(file.FileName).ToLowerInvariant()))
             {
                 return (false, "Invalid file type.");
             }
@@ -99,10 +118,11 @@ namespace dev4_image_uploader.Controllers
             return (true, null);
         }
 
-        public bool FilenameExists(string fileName)
+        public async Task<bool> FilenameExists(string fileName)
         {
-            // Check if the file name already exists in the storage
-            return _imageEntries.ContainsKey(fileName);
+            // return true if filename exists in table
+            var savedImageEntry = await _context.ImageEntries.FirstOrDefaultAsync(e => e.FileName == fileName);
+            return savedImageEntry != null;
         }
     }
 }
